@@ -99,6 +99,12 @@ export default function IncidentsPage() {
         <header className="border-b bg-card">
           <div className="flex h-16 items-center px-6">
             <div className="flex items-center space-x-4">
+              {currentView === "list" && (
+                <Button variant="ghost" size="sm" onClick={() => router.push("/")}>
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  На главную
+                </Button>
+              )}
               {currentView !== "list" && (
                 <Button variant="ghost" size="sm" onClick={() => setCurrentView("list")}>
                   <ArrowLeft className="h-4 w-4 mr-2" />

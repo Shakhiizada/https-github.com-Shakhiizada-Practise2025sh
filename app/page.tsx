@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -78,6 +79,7 @@ const getStatusColor = (status: string) => {
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("overview")
   const { hasPermission } = useAuth()
+  const router = useRouter()
 
   return (
     <ProtectedRoute>
@@ -95,7 +97,7 @@ export default function Dashboard() {
                 Поиск
               </Button>
               {hasPermission("create_incident") && (
-                <Button size="sm" onClick={() => (window.location.href = "/incidents")}>
+                <Button size="sm" onClick={() => router.push("/incidents")}>
                   <Plus className="h-4 w-4 mr-2" />
                   Новый инцидент
                 </Button>
@@ -113,24 +115,16 @@ export default function Dashboard() {
                 <Activity className="h-4 w-4 mr-2" />
                 Дашборд
               </Button>
-              <Button
-                variant="ghost"
-                className="w-full justify-start"
-                onClick={() => (window.location.href = "/incidents")}
-              >
+              <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/incidents")}>
                 <AlertTriangle className="h-4 w-4 mr-2" />
                 Инциденты
               </Button>
-              <Button variant="ghost" className="w-full justify-start">
+              <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/team")}>
                 <Users className="h-4 w-4 mr-2" />
                 Команда
               </Button>
               {hasPermission("view_reports") && (
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start"
-                  onClick={() => (window.location.href = "/reports")}
-                >
+                <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/reports")}>
                   <TrendingUp className="h-4 w-4 mr-2" />
                   Отчеты
                 </Button>
@@ -166,9 +160,9 @@ export default function Dashboard() {
                 </Card>
 
                 <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Критические</CardTitle>
-                    <Shield className="h-4 w-4 text-destructive" />
+                  <CardHeader>
+                    <CardTitle>Критические</CardTitle>
+                    <CardDescription>Высокий приоритет</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold text-destructive">5</div>

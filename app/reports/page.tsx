@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -26,6 +27,7 @@ import {
   CheckCircle,
   XCircle,
   Activity,
+  ArrowLeft,
 } from "lucide-react"
 
 // Mock data for reports
@@ -47,6 +49,7 @@ const slaMetrics = [
 export default function ReportsPage() {
   const [timeRange, setTimeRange] = useState("30d")
   const [reportType, setReportType] = useState("overview")
+  const router = useRouter()
 
   const handleExportReport = () => {
     // В реальном приложении здесь будет логика экспорта
@@ -59,9 +62,15 @@ export default function ReportsPage() {
         {/* Header */}
         <header className="border-b bg-card">
           <div className="flex h-16 items-center px-6">
-            <div className="flex items-center space-x-2">
-              <Shield className="h-6 w-6 text-primary" />
-              <h1 className="text-xl font-bold text-foreground">Отчеты и аналитика</h1>
+            <div className="flex items-center space-x-4">
+              <Button variant="ghost" size="sm" onClick={() => router.push("/")}>
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Назад
+              </Button>
+              <div className="flex items-center space-x-2">
+                <Shield className="h-6 w-6 text-primary" />
+                <h1 className="text-xl font-bold text-foreground">Отчеты и аналитика</h1>
+              </div>
             </div>
             <div className="ml-auto flex items-center space-x-4">
               <Select value={timeRange} onValueChange={setTimeRange}>
