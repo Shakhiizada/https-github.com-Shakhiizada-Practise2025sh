@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AlertTriangle, Shield, Activity, Users, Clock, TrendingUp, Plus, Search, Filter, Download } from "lucide-react"
+import { AlertTriangle, Shield, Activity, Clock, Plus, Search, Filter, Download } from "lucide-react"
 import { ProtectedRoute } from "@/components/protected-route"
 import { UserMenu } from "@/components/user-menu"
 import { useAuth } from "@/contexts/auth-context"
@@ -119,16 +119,6 @@ export default function Dashboard() {
                 <AlertTriangle className="h-4 w-4 mr-2" />
                 Инциденты
               </Button>
-              <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/team")}>
-                <Users className="h-4 w-4 mr-2" />
-                Команда
-              </Button>
-              {hasPermission("view_reports") && (
-                <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/reports")}>
-                  <TrendingUp className="h-4 w-4 mr-2" />
-                  Отчеты
-                </Button>
-              )}
             </nav>
           </aside>
 
@@ -187,7 +177,6 @@ export default function Dashboard() {
                 <TabsList>
                   <TabsTrigger value="overview">Обзор</TabsTrigger>
                   <TabsTrigger value="incidents">Активные инциденты</TabsTrigger>
-                  {hasPermission("view_reports") && <TabsTrigger value="analytics">Аналитика</TabsTrigger>}
                 </TabsList>
 
                 <TabsContent value="overview" className="space-y-6">
@@ -270,18 +259,20 @@ export default function Dashboard() {
                         <Filter className="h-4 w-4 mr-2" />
                         Фильтр
                       </Button>
-                      {hasPermission("view_reports") && (
-                        <Button variant="outline" size="sm">
-                          <Download className="h-4 w-4 mr-2" />
-                          Экспорт
-                        </Button>
-                      )}
+                      <Button variant="outline" size="sm">
+                        <Download className="h-4 w-4 mr-2" />
+                        Экспорт
+                      </Button>
                     </div>
                   </div>
 
                   <div className="space-y-4">
                     {mockIncidents.map((incident) => (
-                      <Card key={incident.id} className="hover:shadow-md transition-shadow">
+                      <Card
+                        key={incident.id}
+                        className="hover:shadow-md transition-shadow cursor-pointer"
+                        onClick={() => router.push(`/incidents/${incident.id}`)}
+                      >
                         <CardContent className="p-6">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
@@ -310,33 +301,6 @@ export default function Dashboard() {
                     ))}
                   </div>
                 </TabsContent>
-
-                {hasPermission("view_reports") && (
-                  <TabsContent value="analytics" className="space-y-6">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Аналитика инцидентов</CardTitle>
-                        <CardDescription>Статистика и тренды за последние 30 дней</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                          <div className="text-center">
-                            <div className="text-3xl font-bold text-primary">127</div>
-                            <p className="text-sm text-muted-foreground">Всего инцидентов</p>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-3xl font-bold text-green-600">89%</div>
-                            <p className="text-sm text-muted-foreground">Решено вовремя</p>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-3xl font-bold text-orange-600">4.2ч</div>
-                            <p className="text-sm text-muted-foreground">Среднее время</p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </TabsContent>
-                )}
               </Tabs>
             </div>
           </main>
