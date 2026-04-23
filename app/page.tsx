@@ -1,60 +1,54 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AlertTriangle, Shield, Activity, Users, Clock, TrendingUp, Plus, Search, Filter, Download } from "lucide-react"
+import { AlertTriangle, Shield, Activity, Users, Clock, TrendingUp, Plus, Search, Filter, Download, Loader2 } from "lucide-react"
 import { ProtectedRoute } from "@/components/protected-route"
 import { UserMenu } from "@/components/user-menu"
 import { useAuth } from "@/contexts/auth-context"
 
-// Mock data for incidents
-const mockIncidents = [
-  {
-    id: "INC-2024-001",
-    title: "Подозрительная активность в сети",
-    type: "Сетевая атака",
-    severity: "Высокая",
-    status: "В работе",
-    assignee: "Иванов И.И.",
-    created: "2024-01-15 14:30",
-    description: "Обнаружена аномальная сетевая активность с внешних IP-адресов",
-  },
-  {
-    id: "INC-2024-002",
-    title: "Попытка несанкционированного доступа",
-    type: "Нарушение доступа",
-    severity: "Критическая",
-    status: "Новый",
-    assignee: "Не назначен",
-    created: "2024-01-15 16:45",
-    description: "Множественные неудачные попытки входа в административную панель",
-  },
-  {
-    id: "INC-2024-003",
-    title: "Обнаружение вредоносного ПО",
-    type: "Malware",
-    severity: "Средняя",
-    status: "Решен",
-    assignee: "Петров П.П.",
-    created: "2024-01-14 09:15",
-    description: "Антивирус обнаружил подозрительный файл на рабочей станции",
-  },
-]
+interface Stats {
+  totalIncidents: number
+  activeIncidents: number
+  criticalIncidents: number
+  averageResponseTime: string
+  incidentsByType: Array<{ type: string; count: number }>
+  incidentsBySeverity: Array<{ severity: string; count: number }>
+  recentActivity: Array<{
+    id: string
+    action: string
+    incidentId: string
+    incidentTitle: string
+    userName: string
+    createdAt: string
+  }>
+}
+
+interface Incident {
+  id: string
+  title: string
+  type: string
+  severity: string
+  status: string
+  assignee?: { name: string } | null
+  createdAt: string
+  description: string
+}
 
 const getSeverityColor = (severity: string) => {
   switch (severity) {
-    case "Критическая":
+    case "CRITICAL":
       return "bg-red-500"
-    case "Высокая":
+    case "HIGH":
       return "bg-orange-500"
-    case "Средняя":
+    case "MEDIUM":
       return "bg-yellow-500"
-    case "Низкая":
+    case "LOW":
       return "bg-green-500"
     default:
       return "bg-gray-500"
@@ -63,23 +57,96 @@ const getSeverityColor = (severity: string) => {
 
 const getStatusColor = (status: string) => {
   switch (status) {
-    case "Новый":
+    case "NEW":
       return "bg-blue-500"
-    case "В работе":
+    case "IN_PROGRESS":
       return "bg-orange-500"
-    case "Решен":
+    case "RESOLVED":
       return "bg-green-500"
-    case "Закрыт":
+    case "CLOSED":
       return "bg-gray-500"
     default:
       return "bg-gray-500"
   }
 }
 
+const getSeverityLabel = (severity: string) => {
+  const labels: Record<string, string> = {
+    CRITICAL: "Критическая",
+    HIGH: "Высокая",
+    MEDIUM: "Средняя",
+    LOW: "Низкая",
+  }
+  return labels[severity] || severity
+}
+
+const getStatusLabel = (status: string) => {
+  const labels: Record<string, string> = {
+    NEW: "Новый",
+    IN_PROGRESS: "В работе",
+    RESOLVED: "Решен",
+    CLOSED: "Закрыт",
+  }
+  return labels[status] || status
+}
+
+const getTypeLabel = (type: string) => {
+  const labels: Record<string, string> = {
+    DATA_LEAK: "Утечка данных",
+    DDOS: "DDoS атака",
+    MALWARE: "Malware",
+    PHISHING: "Фишинг",
+    UNAUTHORIZED_ACCESS: "Несанкц. доступ",
+    NETWORK_ATTACK: "Сетевая атака",
+    OTHER: "Другое",
+  }
+  return labels[type] || type
+}
+
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("overview")
+  const [stats, setStats] = useState<Stats | null>(null)
+  const [incidents, setIncidents] = useState<Incident[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const { hasPermission } = useAuth()
   const router = useRouter()
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [statsRes, incidentsRes] = await Promise.all([
+          fetch("/api/stats"),
+          fetch("/api/incidents?status=NEW,IN_PROGRESS&limit=10"),
+        ])
+
+        if (statsRes.ok) {
+          const statsData = await statsRes.json()
+          setStats(statsData)
+        }
+
+        if (incidentsRes.ok) {
+          const incidentsData = await incidentsRes.json()
+          setIncidents(incidentsData.incidents || [])
+        }
+      } catch (error) {
+        console.error("Failed to fetch data:", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [])
+
+  if (isLoading) {
+    return (
+      <ProtectedRoute>
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </ProtectedRoute>
+    )
+  }
 
   return (
     <ProtectedRoute>
@@ -143,8 +210,8 @@ export default function Dashboard() {
                     <AlertTriangle className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">127</div>
-                    <p className="text-xs text-muted-foreground">+12% за месяц</p>
+                    <div className="text-2xl font-bold">{stats?.totalIncidents || 0}</div>
+                    <p className="text-xs text-muted-foreground">За все время</p>
                   </CardContent>
                 </Card>
 
@@ -154,29 +221,29 @@ export default function Dashboard() {
                     <Clock className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">23</div>
+                    <div className="text-2xl font-bold">{stats?.activeIncidents || 0}</div>
                     <p className="text-xs text-muted-foreground">Требуют внимания</p>
                   </CardContent>
                 </Card>
 
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Критические</CardTitle>
-                    <CardDescription>Высокий приоритет</CardDescription>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Критические</CardTitle>
+                    <AlertTriangle className="h-4 w-4 text-destructive" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-destructive">5</div>
+                    <div className="text-2xl font-bold text-destructive">{stats?.criticalIncidents || 0}</div>
                     <p className="text-xs text-muted-foreground">Высокий приоритет</p>
                   </CardContent>
                 </Card>
 
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Среднее время</CardTitle>
-                    <CardDescription>Время реагирования</CardDescription>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Среднее время</CardTitle>
+                    <Clock className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">4.2ч</div>
+                    <div className="text-2xl font-bold">{stats?.averageResponseTime || "N/A"}</div>
                     <p className="text-xs text-muted-foreground">Время реагирования</p>
                   </CardContent>
                 </Card>
@@ -200,29 +267,19 @@ export default function Dashboard() {
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm">Критическая</span>
-                            <span className="text-sm font-medium">5</span>
-                          </div>
-                          <Progress value={22} className="h-2" />
-
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm">Высокая</span>
-                            <span className="text-sm font-medium">8</span>
-                          </div>
-                          <Progress value={35} className="h-2" />
-
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm">Средняя</span>
-                            <span className="text-sm font-medium">7</span>
-                          </div>
-                          <Progress value={30} className="h-2" />
-
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm">Низкая</span>
-                            <span className="text-sm font-medium">3</span>
-                          </div>
-                          <Progress value={13} className="h-2" />
+                          {stats?.incidentsBySeverity?.map((item) => {
+                            const total = stats.totalIncidents || 1
+                            const percentage = Math.round((item.count / total) * 100)
+                            return (
+                              <div key={item.severity}>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm">{getSeverityLabel(item.severity)}</span>
+                                  <span className="text-sm font-medium">{item.count}</span>
+                                </div>
+                                <Progress value={percentage} className="h-2" />
+                              </div>
+                            )
+                          })}
                         </div>
                       </CardContent>
                     </Card>
@@ -235,27 +292,22 @@ export default function Dashboard() {
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-4">
-                          <div className="flex items-start space-x-3">
-                            <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
-                            <div className="flex-1">
-                              <p className="text-sm">Инцидент INC-2024-003 закрыт</p>
-                              <p className="text-xs text-muted-foreground">2 минуты назад</p>
+                          {stats?.recentActivity?.slice(0, 5).map((activity) => (
+                            <div key={activity.id} className="flex items-start space-x-3">
+                              <div className="w-2 h-2 bg-primary rounded-full mt-2"></div>
+                              <div className="flex-1">
+                                <p className="text-sm">
+                                  {activity.action} - {activity.incidentTitle}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {activity.userName} - {new Date(activity.createdAt).toLocaleString("ru-RU")}
+                                </p>
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex items-start space-x-3">
-                            <div className="w-2 h-2 bg-orange-500 rounded-full mt-2"></div>
-                            <div className="flex-1">
-                              <p className="text-sm">Новый инцидент INC-2024-002</p>
-                              <p className="text-xs text-muted-foreground">15 минут назад</p>
-                            </div>
-                          </div>
-                          <div className="flex items-start space-x-3">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
-                            <div className="flex-1">
-                              <p className="text-sm">Назначен ответственный за INC-2024-001</p>
-                              <p className="text-xs text-muted-foreground">1 час назад</p>
-                            </div>
-                          </div>
+                          ))}
+                          {(!stats?.recentActivity || stats.recentActivity.length === 0) && (
+                            <p className="text-sm text-muted-foreground">Нет недавней активности</p>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -280,34 +332,41 @@ export default function Dashboard() {
                   </div>
 
                   <div className="space-y-4">
-                    {mockIncidents.map((incident) => (
-                      <Card key={incident.id} className="hover:shadow-md transition-shadow">
+                    {incidents.map((incident) => (
+                      <Card key={incident.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => router.push(`/incidents/${incident.id}`)}>
                         <CardContent className="p-6">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <div className="flex items-center space-x-3 mb-2">
                                 <h3 className="font-semibold">{incident.title}</h3>
-                                <Badge variant="outline">{incident.id}</Badge>
+                                <Badge variant="outline">{incident.id.slice(0, 8)}</Badge>
                               </div>
                               <p className="text-sm text-muted-foreground mb-3">{incident.description}</p>
                               <div className="flex items-center space-x-4 text-sm">
-                                <span>Тип: {incident.type}</span>
-                                <span>Создан: {incident.created}</span>
-                                <span>Ответственный: {incident.assignee}</span>
+                                <span>Тип: {getTypeLabel(incident.type)}</span>
+                                <span>Создан: {new Date(incident.createdAt).toLocaleString("ru-RU")}</span>
+                                <span>Ответственный: {incident.assignee?.name || "Не назначен"}</span>
                               </div>
                             </div>
                             <div className="flex flex-col items-end space-y-2">
                               <Badge className={`${getSeverityColor(incident.severity)} text-white`}>
-                                {incident.severity}
+                                {getSeverityLabel(incident.severity)}
                               </Badge>
                               <Badge className={`${getStatusColor(incident.status)} text-white`}>
-                                {incident.status}
+                                {getStatusLabel(incident.status)}
                               </Badge>
                             </div>
                           </div>
                         </CardContent>
                       </Card>
                     ))}
+                    {incidents.length === 0 && (
+                      <Card>
+                        <CardContent className="p-6 text-center">
+                          <p className="text-muted-foreground">Нет активных инцидентов</p>
+                        </CardContent>
+                      </Card>
+                    )}
                   </div>
                 </TabsContent>
 
@@ -316,20 +375,24 @@ export default function Dashboard() {
                     <Card>
                       <CardHeader>
                         <CardTitle>Аналитика инцидентов</CardTitle>
-                        <CardDescription>Статистика и тренды за последние 30 дней</CardDescription>
+                        <CardDescription>Статистика и тренды</CardDescription>
                       </CardHeader>
                       <CardContent>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                           <div className="text-center">
-                            <div className="text-3xl font-bold text-primary">127</div>
+                            <div className="text-3xl font-bold text-primary">{stats?.totalIncidents || 0}</div>
                             <p className="text-sm text-muted-foreground">Всего инцидентов</p>
                           </div>
                           <div className="text-center">
-                            <div className="text-3xl font-bold text-green-600">89%</div>
-                            <p className="text-sm text-muted-foreground">Решено вовремя</p>
+                            <div className="text-3xl font-bold text-green-600">
+                              {stats?.totalIncidents 
+                                ? Math.round(((stats.totalIncidents - stats.activeIncidents) / stats.totalIncidents) * 100) 
+                                : 0}%
+                            </div>
+                            <p className="text-sm text-muted-foreground">Решено</p>
                           </div>
                           <div className="text-center">
-                            <div className="text-3xl font-bold text-orange-600">4.2ч</div>
+                            <div className="text-3xl font-bold text-orange-600">{stats?.averageResponseTime || "N/A"}</div>
                             <p className="text-sm text-muted-foreground">Среднее время</p>
                           </div>
                         </div>
