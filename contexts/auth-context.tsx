@@ -1,6 +1,8 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
+import { createClient } from "@/lib/supabase/client"
+import type { User as SupabaseUser } from "@supabase/supabase-js"
 
 export type UserRole = "ADMIN" | "ANALYST" | "EMPLOYEE"
 
@@ -13,9 +15,17 @@ export interface User {
   department?: string
 }
 
+interface Profile {
+  id: string
+  email: string
+  name: string
+  role: UserRole
+  department?: string
+}
+
 interface AuthContextType {
   user: User | null
-  login: (email: string, password: string) => Promise<boolean>
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   logout: () => Promise<void>
   isLoading: boolean
   hasPermission: (permission: string) => boolean
@@ -33,15 +43,31 @@ const rolePermissions: Record<UserRole, string[]> = {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const supabase = createClient()
 
   useEffect(() => {
-    // Check for existing session via API
+    // Check for existing session
     const checkSession = async () => {
       try {
-        const res = await fetch("/api/auth/me")
-        if (res.ok) {
-          const data = await res.json()
-          setUser(data.user)
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+        
+        if (authUser) {
+          // Fetch profile data
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", authUser.id)
+            .single()
+          
+          if (profile) {
+            setUser({
+              id: profile.id,
+              name: profile.name,
+              email: profile.email,
+              role: profile.role as UserRole,
+              department: profile.department,
+            })
+          }
         }
       } catch (error) {
         console.error("Session check failed:", error)
@@ -49,40 +75,87 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(false)
       }
     }
-    checkSession()
-  }, [])
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+    checkSession()
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_IN" && session?.user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", session.user.id)
+          .single()
+        
+        if (profile) {
+          setUser({
+            id: profile.id,
+            name: profile.name,
+            email: profile.email,
+            role: profile.role as UserRole,
+            department: profile.department,
+          })
+        }
+      } else if (event === "SIGNED_OUT") {
+        setUser(null)
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [supabase])
+
+  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true)
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       })
 
-      if (res.ok) {
-        const data = await res.json()
-        setUser(data.user)
+      if (error) {
         setIsLoading(false)
-        return true
+        return { success: false, error: error.message }
       }
+
+      if (data.user) {
+        // Fetch profile data
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", data.user.id)
+          .single()
+        
+        if (profile) {
+          setUser({
+            id: profile.id,
+            name: profile.name,
+            email: profile.email,
+            role: profile.role as UserRole,
+            department: profile.department,
+          })
+        }
+        setIsLoading(false)
+        return { success: true }
+      }
+
       setIsLoading(false)
-      return false
+      return { success: false, error: "Login failed" }
     } catch (error) {
       console.error("Login failed:", error)
       setIsLoading(false)
-      return false
+      return { success: false, error: "An unexpected error occurred" }
     }
   }
 
   const logout = async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST" })
+      await supabase.auth.signOut()
+      setUser(null)
     } catch (error) {
       console.error("Logout failed:", error)
     }
-    setUser(null)
   }
 
   const hasPermission = (permission: string): boolean => {
@@ -91,7 +164,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading, hasPermission }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ user, login, logout, isLoading, hasPermission }}>
+      {children}
+    </AuthContext.Provider>
   )
 }
 

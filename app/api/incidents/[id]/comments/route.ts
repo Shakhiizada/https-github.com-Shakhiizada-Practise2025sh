@@ -1,36 +1,38 @@
 import { NextRequest, NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
-import { getCurrentUser } from "@/lib/auth"
+import { createClient } from "@/lib/supabase/server"
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getCurrentUser()
+    const supabase = await createClient()
+    
+    const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const { id } = await params
 
-    const comments = await prisma.comment.findMany({
-      where: { incidentId: id },
-      include: {
-        author: {
-          select: { id: true, name: true, email: true, role: true },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    })
+    const { data: comments, error } = await supabase
+      .from("comments")
+      .select(`
+        *,
+        author:profiles(id, name, email, role)
+      `)
+      .eq("incident_id", id)
+      .order("created_at", { ascending: false })
 
-    return NextResponse.json({ comments })
+    if (error) {
+      console.error("Error fetching comments:", error)
+      return NextResponse.json({ error: "Failed to fetch comments" }, { status: 500 })
+    }
+
+    return NextResponse.json({ comments: comments || [] })
   } catch (error) {
     console.error("Get comments error:", error)
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
 
@@ -39,60 +41,60 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getCurrentUser()
+    const supabase = await createClient()
+    
+    const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const { id } = await params
-    const { content, type = "comment" } = await request.json()
+    const { content } = await request.json()
 
     if (!content) {
-      return NextResponse.json(
-        { error: "Content is required" },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: "Content is required" }, { status: 400 })
     }
 
-    const incident = await prisma.incident.findUnique({ where: { id } })
+    // Check if incident exists
+    const { data: incident } = await supabase
+      .from("incidents")
+      .select("id")
+      .eq("id", id)
+      .single()
+
     if (!incident) {
-      return NextResponse.json(
-        { error: "Incident not found" },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: "Incident not found" }, { status: 404 })
     }
 
-    const comment = await prisma.comment.create({
-      data: {
+    const { data: comment, error } = await supabase
+      .from("comments")
+      .insert({
         content,
-        type,
-        incidentId: id,
-        authorId: user.userId,
-      },
-      include: {
-        author: {
-          select: { id: true, name: true, email: true, role: true },
-        },
-      },
-    })
+        incident_id: id,
+        author_id: user.id,
+      })
+      .select(`
+        *,
+        author:profiles(id, name, email, role)
+      `)
+      .single()
 
-    await prisma.auditLog.create({
-      data: {
-        action: "ADD_COMMENT",
-        entity: "comment",
-        entityId: comment.id,
-        userId: user.userId,
-        incidentId: id,
-        details: { type },
-      },
+    if (error) {
+      console.error("Error creating comment:", error)
+      return NextResponse.json({ error: "Failed to create comment" }, { status: 500 })
+    }
+
+    // Create audit log
+    await supabase.from("audit_logs").insert({
+      action: "ADD_COMMENT",
+      entity_type: "comment",
+      entity_id: comment.id,
+      user_id: user.id,
     })
 
     return NextResponse.json({ comment }, { status: 201 })
   } catch (error) {
     console.error("Create comment error:", error)
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
