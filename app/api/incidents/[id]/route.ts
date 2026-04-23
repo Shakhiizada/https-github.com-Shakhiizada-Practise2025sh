@@ -1,74 +1,83 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+
+// Mock incidents data
+const mockIncidents: Record<string, object> = {
+  "1": {
+    id: "1",
+    title: "Подозрительная активность в корпоративной сети",
+    description: "Обнаружена подозрительная сетевая активность с внешнего IP-адреса. Зафиксированы множественные попытки подключения к критически важным серверам.",
+    type: "UNAUTHORIZED_ACCESS",
+    severity: "HIGH",
+    status: "IN_PROGRESS",
+    source: "SIEM",
+    affectedSystems: "Корпоративный файервол, VPN-сервер",
+    createdAt: new Date(Date.now() - 86400000).toISOString(),
+    updatedAt: new Date().toISOString(),
+    reporter: { id: "1", name: "Александр Иванов", email: "admin@company.com", role: "ADMIN", department: "Отдел ИБ" },
+    assignee: { id: "2", name: "Мария Петрова", email: "analyst@company.com", role: "ANALYST", department: "Отдел ИБ" },
+    comments: [
+      { id: "1", content: "Начал анализ логов файервола", createdAt: new Date(Date.now() - 43200000).toISOString(), author: { id: "2", name: "Мария Петрова", role: "ANALYST" } },
+      { id: "2", content: "Обнаружены попытки сканирования портов", createdAt: new Date(Date.now() - 21600000).toISOString(), author: { id: "2", name: "Мария Петрова", role: "ANALYST" } },
+    ],
+    files: [],
+    auditLogs: [
+      { id: "1", action: "Создан инцидент", createdAt: new Date(Date.now() - 86400000).toISOString(), user: { name: "Александр Иванов" } },
+      { id: "2", action: "Назначен исполнитель", createdAt: new Date(Date.now() - 82800000).toISOString(), user: { name: "Александр Иванов" } },
+    ],
+  },
+  "2": {
+    id: "2",
+    title: "Фишинговая рассылка сотрудникам",
+    description: "Массовая фишинговая атака через электронную почту. Обнаружены письма с вредоносными ссылками.",
+    type: "PHISHING",
+    severity: "MEDIUM",
+    status: "NEW",
+    source: "Сотрудник",
+    affectedSystems: "Корпоративная почта",
+    createdAt: new Date(Date.now() - 172800000).toISOString(),
+    updatedAt: new Date(Date.now() - 86400000).toISOString(),
+    reporter: { id: "3", name: "Дмитрий Сидоров", email: "employee@company.com", role: "EMPLOYEE", department: "ИТ отдел" },
+    assignee: null,
+    comments: [],
+    files: [],
+    auditLogs: [
+      { id: "1", action: "Создан инцидент", createdAt: new Date(Date.now() - 172800000).toISOString(), user: { name: "Дмитрий Сидоров" } },
+    ],
+  },
+  "3": {
+    id: "3",
+    title: "Обнаружено вредоносное ПО на рабочей станции",
+    description: "Антивирус обнаружил троян на компьютере сотрудника бухгалтерии. Требуется немедленное реагирование.",
+    type: "MALWARE",
+    severity: "CRITICAL",
+    status: "IN_PROGRESS",
+    source: "Антивирус",
+    affectedSystems: "Рабочая станция WS-001",
+    createdAt: new Date(Date.now() - 259200000).toISOString(),
+    updatedAt: new Date(Date.now() - 43200000).toISOString(),
+    reporter: { id: "2", name: "Мария Петрова", email: "analyst@company.com", role: "ANALYST", department: "Отдел ИБ" },
+    assignee: { id: "1", name: "Александр Иванов", email: "admin@company.com", role: "ADMIN", department: "Отдел ИБ" },
+    comments: [
+      { id: "1", content: "Компьютер изолирован от сети", createdAt: new Date(Date.now() - 172800000).toISOString(), author: { id: "1", name: "Александр Иванов", role: "ADMIN" } },
+    ],
+    files: [],
+    auditLogs: [],
+  },
+}
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
     const { id } = await params
+    const incident = mockIncidents[id]
 
-    const { data: incident, error } = await supabase
-      .from("incidents")
-      .select(`
-        *,
-        reporter:profiles!incidents_reporter_id_fkey(id, name, email, role, department),
-        assignee:profiles!incidents_assignee_id_fkey(id, name, email, role, department)
-      `)
-      .eq("id", id)
-      .single()
-
-    if (error || !incident) {
+    if (!incident) {
       return NextResponse.json({ error: "Incident not found" }, { status: 404 })
     }
 
-    // Get comments
-    const { data: comments } = await supabase
-      .from("comments")
-      .select(`
-        *,
-        author:profiles(id, name, email, role)
-      `)
-      .eq("incident_id", id)
-      .order("created_at", { ascending: false })
-
-    // Get files
-    const { data: files } = await supabase
-      .from("files")
-      .select(`
-        *,
-        uploader:profiles(id, name)
-      `)
-      .eq("incident_id", id)
-      .order("created_at", { ascending: false })
-
-    // Get audit logs
-    const { data: auditLogs } = await supabase
-      .from("audit_logs")
-      .select(`
-        *,
-        user:profiles(id, name)
-      `)
-      .eq("entity_id", id)
-      .eq("entity_type", "incident")
-      .order("created_at", { ascending: false })
-      .limit(20)
-
-    return NextResponse.json({
-      incident: {
-        ...incident,
-        comments: comments || [],
-        files: files || [],
-        auditLogs: auditLogs || [],
-      },
-    })
+    return NextResponse.json({ incident })
   } catch (error) {
     console.error("Get incident error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
@@ -80,64 +89,18 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
     const { id } = await params
     const body = await request.json()
-    const { title, type, severity, status, description, source, assigneeId } = body
 
-    // Get existing incident
-    const { data: existing } = await supabase
-      .from("incidents")
-      .select("*")
-      .eq("id", id)
-      .single()
-
+    const existing = mockIncidents[id]
     if (!existing) {
       return NextResponse.json({ error: "Incident not found" }, { status: 404 })
     }
 
-    const updateData: Record<string, unknown> = {}
-    if (title !== undefined) updateData.title = title
-    if (type !== undefined) updateData.type = type
-    if (severity !== undefined) updateData.severity = severity
-    if (status !== undefined) updateData.status = status
-    if (description !== undefined) updateData.description = description
-    if (source !== undefined) updateData.source = source
-    if (assigneeId !== undefined) updateData.assignee_id = assigneeId || null
+    const updated = { ...existing, ...body, updatedAt: new Date().toISOString() }
+    mockIncidents[id] = updated
 
-    const { data: incident, error } = await supabase
-      .from("incidents")
-      .update(updateData)
-      .eq("id", id)
-      .select(`
-        *,
-        reporter:profiles!incidents_reporter_id_fkey(id, name, email, role),
-        assignee:profiles!incidents_assignee_id_fkey(id, name, email, role)
-      `)
-      .single()
-
-    if (error) {
-      console.error("Error updating incident:", error)
-      return NextResponse.json({ error: "Failed to update incident" }, { status: 500 })
-    }
-
-    // Create audit log
-    await supabase.from("audit_logs").insert({
-      action: "UPDATE_INCIDENT",
-      entity_type: "incident",
-      entity_id: id,
-      old_values: existing,
-      new_values: incident,
-      user_id: user.id,
-    })
-
-    return NextResponse.json({ incident })
+    return NextResponse.json({ incident: updated })
   } catch (error) {
     console.error("Update incident error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
@@ -149,36 +112,13 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    // Check if user is admin
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single()
-
-    if (profile?.role !== "ADMIN") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
-
     const { id } = await params
 
-    const { error } = await supabase
-      .from("incidents")
-      .delete()
-      .eq("id", id)
-
-    if (error) {
-      console.error("Error deleting incident:", error)
-      return NextResponse.json({ error: "Failed to delete incident" }, { status: 500 })
+    if (!mockIncidents[id]) {
+      return NextResponse.json({ error: "Incident not found" }, { status: 404 })
     }
 
+    delete mockIncidents[id]
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("Delete incident error:", error)

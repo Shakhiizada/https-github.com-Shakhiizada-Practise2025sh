@@ -1,117 +1,59 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
 
+// Mock data for stats
 export async function GET() {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    // Get all incidents for stats
-    const { data: incidents, error: incidentsError } = await supabase
-      .from("incidents")
-      .select("id, type, status, severity, created_at, title, reporter_id, assignee_id")
-    
-    if (incidentsError) {
-      console.error("Error fetching incidents:", incidentsError)
-      return NextResponse.json({ error: "Failed to fetch stats" }, { status: 500 })
-    }
-
-    const allIncidents = incidents || []
-    
-    // Calculate stats
-    const totalIncidents = allIncidents.length
-    const activeIncidents = allIncidents.filter(i => i.status === "NEW" || i.status === "IN_PROGRESS").length
-    const criticalIncidents = allIncidents.filter(i => i.severity === "CRITICAL").length
-    
-    // Group by type
-    const byType: Record<string, number> = {}
-    allIncidents.forEach(i => {
-      byType[i.type] = (byType[i.type] || 0) + 1
-    })
-    
-    // Group by severity
-    const bySeverity: Record<string, number> = {}
-    allIncidents.forEach(i => {
-      bySeverity[i.severity] = (bySeverity[i.severity] || 0) + 1
-    })
-    
-    // Group by status
-    const byStatus: Record<string, number> = {}
-    allIncidents.forEach(i => {
-      byStatus[i.status] = (byStatus[i.status] || 0) + 1
-    })
-
-    // Get recent activity from audit logs
-    const { data: recentActivity } = await supabase
-      .from("audit_logs")
-      .select(`
-        id,
-        action,
-        entity_type,
-        entity_id,
-        created_at,
-        user_id
-      `)
-      .order("created_at", { ascending: false })
-      .limit(10)
-
-    // Get profiles for recent activity
-    const userIds = [...new Set((recentActivity || []).map(a => a.user_id))]
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, name")
-      .in("id", userIds)
-    
-    const profileMap = new Map((profiles || []).map(p => [p.id, p.name]))
-
-    const typeLabels: Record<string, string> = {
-      DATA_LEAK: "Утечка данных",
-      DDOS: "DDoS",
-      MALWARE: "Вредоносное ПО",
-      PHISHING: "Фишинг",
-      UNAUTHORIZED_ACCESS: "Несанкц. доступ",
-      INSIDER_THREAT: "Внутренняя угроза",
-      OTHER: "Другое",
-    }
-
-    const severityLabels: Record<string, string> = {
-      LOW: "Низкий",
-      MEDIUM: "Средний",
-      HIGH: "Высокий",
-      CRITICAL: "Критический",
-    }
-
     return NextResponse.json({
-      totalIncidents,
-      activeIncidents,
-      criticalIncidents,
+      totalIncidents: 47,
+      activeIncidents: 12,
+      criticalIncidents: 3,
       averageResponseTime: "2.4 ч",
-      incidentsByType: Object.entries(byType).map(([type, count]) => ({
-        type,
-        name: typeLabels[type] || type,
-        count,
-      })),
-      incidentsBySeverity: Object.entries(bySeverity).map(([severity, count]) => ({
-        severity,
-        name: severityLabels[severity] || severity,
-        count,
-      })),
-      incidentsByStatus: Object.entries(byStatus).map(([status, count]) => ({
-        status,
-        count,
-      })),
-      recentActivity: (recentActivity || []).map(a => ({
-        id: a.id,
-        action: a.action,
-        incidentId: a.entity_id,
-        incidentTitle: `Инцидент ${a.entity_id.slice(0, 8)}`,
-        userName: profileMap.get(a.user_id) || "Неизвестный",
-        createdAt: a.created_at,
-      })),
+      incidentsByType: [
+        { type: "PHISHING", name: "Фишинг", count: 15 },
+        { type: "MALWARE", name: "Вредоносное ПО", count: 12 },
+        { type: "DATA_LEAK", name: "Утечка данных", count: 8 },
+        { type: "UNAUTHORIZED_ACCESS", name: "Несанкц. доступ", count: 6 },
+        { type: "DDOS", name: "DDoS", count: 4 },
+        { type: "INSIDER_THREAT", name: "Внутренняя угроза", count: 2 },
+      ],
+      incidentsBySeverity: [
+        { severity: "LOW", name: "Низкий", count: 18 },
+        { severity: "MEDIUM", name: "Средний", count: 16 },
+        { severity: "HIGH", name: "Высокий", count: 10 },
+        { severity: "CRITICAL", name: "Критический", count: 3 },
+      ],
+      incidentsByStatus: [
+        { status: "NEW", count: 5 },
+        { status: "IN_PROGRESS", count: 7 },
+        { status: "RESOLVED", count: 20 },
+        { status: "CLOSED", count: 15 },
+      ],
+      recentActivity: [
+        {
+          id: "1",
+          action: "Создан инцидент",
+          incidentId: "INC-047",
+          incidentTitle: "Подозрительная активность в сети",
+          userName: "Александр Иванов",
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: "2",
+          action: "Изменен статус",
+          incidentId: "INC-045",
+          incidentTitle: "Фишинговое письмо",
+          userName: "Мария Петрова",
+          createdAt: new Date(Date.now() - 3600000).toISOString(),
+        },
+        {
+          id: "3",
+          action: "Добавлен комментарий",
+          incidentId: "INC-043",
+          incidentTitle: "Обнаружен вирус",
+          userName: "Дмитрий Сидоров",
+          createdAt: new Date(Date.now() - 7200000).toISOString(),
+        },
+      ],
     })
   } catch (error) {
     console.error("Get stats error:", error)

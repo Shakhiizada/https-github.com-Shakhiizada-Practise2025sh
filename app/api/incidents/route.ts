@@ -1,57 +1,106 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+
+// Mock incidents data
+const mockIncidents = [
+  {
+    id: "1",
+    title: "Подозрительная активность в корпоративной сети",
+    description: "Обнаружена подозрительная сетевая активность с внешнего IP-адреса.",
+    type: "UNAUTHORIZED_ACCESS",
+    severity: "HIGH",
+    status: "IN_PROGRESS",
+    source: "SIEM",
+    affectedSystems: "Корпоративный файервол",
+    createdAt: new Date(Date.now() - 86400000).toISOString(),
+    updatedAt: new Date().toISOString(),
+    reporter: { id: "1", name: "Александр Иванов", email: "admin@company.com" },
+    assignee: { id: "2", name: "Мария Петрова", email: "analyst@company.com" },
+  },
+  {
+    id: "2",
+    title: "Фишинговая рассылка сотрудникам",
+    description: "Массовая фишинговая атака через электронную почту.",
+    type: "PHISHING",
+    severity: "MEDIUM",
+    status: "NEW",
+    source: "Сотрудник",
+    affectedSystems: "Корпоративная почта",
+    createdAt: new Date(Date.now() - 172800000).toISOString(),
+    updatedAt: new Date(Date.now() - 86400000).toISOString(),
+    reporter: { id: "3", name: "Дмитрий Сидоров", email: "employee@company.com" },
+    assignee: null,
+  },
+  {
+    id: "3",
+    title: "Обнаружено вредоносное ПО на рабочей станции",
+    description: "Антивирус обнаружил троян на компьютере сотрудника бухгалтерии.",
+    type: "MALWARE",
+    severity: "CRITICAL",
+    status: "IN_PROGRESS",
+    source: "Антивирус",
+    affectedSystems: "Рабочая станция WS-001",
+    createdAt: new Date(Date.now() - 259200000).toISOString(),
+    updatedAt: new Date(Date.now() - 43200000).toISOString(),
+    reporter: { id: "2", name: "Мария Петрова", email: "analyst@company.com" },
+    assignee: { id: "1", name: "Александр Иванов", email: "admin@company.com" },
+  },
+  {
+    id: "4",
+    title: "Утечка данных клиентов",
+    description: "Обнаружена потенциальная утечка персональных данных клиентов.",
+    type: "DATA_LEAK",
+    severity: "CRITICAL",
+    status: "RESOLVED",
+    source: "Внутренний аудит",
+    affectedSystems: "CRM система",
+    createdAt: new Date(Date.now() - 604800000).toISOString(),
+    updatedAt: new Date(Date.now() - 172800000).toISOString(),
+    reporter: { id: "1", name: "Александр Иванов", email: "admin@company.com" },
+    assignee: { id: "2", name: "Мария Петрова", email: "analyst@company.com" },
+  },
+  {
+    id: "5",
+    title: "DDoS атака на веб-сервер",
+    description: "Зафиксирована распределенная атака отказа в обслуживании.",
+    type: "DDOS",
+    severity: "HIGH",
+    status: "CLOSED",
+    source: "Мониторинг",
+    affectedSystems: "Веб-сервер",
+    createdAt: new Date(Date.now() - 1209600000).toISOString(),
+    updatedAt: new Date(Date.now() - 604800000).toISOString(),
+    reporter: { id: "2", name: "Мария Петрова", email: "analyst@company.com" },
+    assignee: { id: "1", name: "Александр Иванов", email: "admin@company.com" },
+  },
+]
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
     const { searchParams } = new URL(request.url)
     const status = searchParams.get("status")
     const severity = searchParams.get("severity")
     const type = searchParams.get("type")
-    const limit = parseInt(searchParams.get("limit") || "50")
-    const offset = parseInt(searchParams.get("offset") || "0")
 
-    let query = supabase
-      .from("incidents")
-      .select(`
-        *,
-        reporter:profiles!incidents_reporter_id_fkey(id, name, email),
-        assignee:profiles!incidents_assignee_id_fkey(id, name, email)
-      `, { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range(offset, offset + limit - 1)
+    let filteredIncidents = [...mockIncidents]
 
     if (status) {
       const statuses = status.split(",")
-      query = query.in("status", statuses)
+      filteredIncidents = filteredIncidents.filter(i => statuses.includes(i.status))
     }
 
     if (severity) {
-      query = query.eq("severity", severity)
+      filteredIncidents = filteredIncidents.filter(i => i.severity === severity)
     }
 
     if (type) {
-      query = query.eq("type", type)
-    }
-
-    const { data: incidents, count, error } = await query
-
-    if (error) {
-      console.error("Error fetching incidents:", error)
-      return NextResponse.json({ error: "Failed to fetch incidents" }, { status: 500 })
+      filteredIncidents = filteredIncidents.filter(i => i.type === type)
     }
 
     return NextResponse.json({
-      incidents: incidents || [],
-      total: count || 0,
-      limit,
-      offset,
+      incidents: filteredIncidents,
+      total: filteredIncidents.length,
+      limit: 50,
+      offset: 0,
     })
   } catch (error) {
     console.error("Get incidents error:", error)
@@ -61,55 +110,29 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
     const body = await request.json()
-    const { title, description, type, severity, source, affectedSystems, assigneeId } = body
+    const { title, description, type, severity } = body
 
     if (!title || !description || !type || !severity) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
-    const { data: incident, error } = await supabase
-      .from("incidents")
-      .insert({
-        title,
-        description,
-        type,
-        severity,
-        status: "NEW",
-        source,
-        affected_systems: affectedSystems,
-        reporter_id: user.id,
-        assignee_id: assigneeId || null,
-      })
-      .select(`
-        *,
-        reporter:profiles!incidents_reporter_id_fkey(id, name, email),
-        assignee:profiles!incidents_assignee_id_fkey(id, name, email)
-      `)
-      .single()
-
-    if (error) {
-      console.error("Error creating incident:", error)
-      return NextResponse.json({ error: "Failed to create incident" }, { status: 500 })
+    const newIncident = {
+      id: String(mockIncidents.length + 1),
+      title,
+      description,
+      type,
+      severity,
+      status: "NEW",
+      source: body.source || "",
+      affectedSystems: body.affectedSystems || "",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      reporter: { id: "1", name: "Текущий пользователь", email: "user@company.com" },
+      assignee: null,
     }
 
-    // Create audit log
-    await supabase.from("audit_logs").insert({
-      action: "CREATE_INCIDENT",
-      entity_type: "incident",
-      entity_id: incident.id,
-      new_values: incident,
-      user_id: user.id,
-    })
-
-    return NextResponse.json(incident, { status: 201 })
+    return NextResponse.json(newIncident, { status: 201 })
   } catch (error) {
     console.error("Create incident error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

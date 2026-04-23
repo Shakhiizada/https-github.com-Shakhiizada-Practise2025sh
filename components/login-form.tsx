@@ -29,12 +29,11 @@ export function LoginForm() {
       return
     }
 
-    const result = await login(email, password)
-    if (result.success) {
+    const success = await login(email, password)
+    if (success) {
       router.push("/")
-      router.refresh()
     } else {
-      setError(result.error || "Неверный email или пароль")
+      setError("Неверный email или пароль")
     }
   }
 
