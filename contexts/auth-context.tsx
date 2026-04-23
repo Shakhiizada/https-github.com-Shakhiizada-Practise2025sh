@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
 
-export type UserRole = "admin" | "analyst" | "employee"
+export type UserRole = "ADMIN" | "ANALYST" | "EMPLOYEE"
 
 export interface User {
   id: string
@@ -16,52 +16,18 @@ export interface User {
 interface AuthContextType {
   user: User | null
   login: (email: string, password: string) => Promise<boolean>
-  logout: () => void
+  logout: () => Promise<void>
   isLoading: boolean
   hasPermission: (permission: string) => boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-// Mock users for demonstration
-const mockUsers: Record<string, { password: string; user: User }> = {
-  "admin@company.com": {
-    password: "admin123",
-    user: {
-      id: "1",
-      name: "Администратор Системы",
-      email: "admin@company.com",
-      role: "admin",
-      department: "IT Безопасность",
-    },
-  },
-  "analyst@company.com": {
-    password: "analyst123",
-    user: {
-      id: "2",
-      name: "Иванов И.И.",
-      email: "analyst@company.com",
-      role: "analyst",
-      department: "Анализ угроз",
-    },
-  },
-  "employee@company.com": {
-    password: "employee123",
-    user: {
-      id: "3",
-      name: "Петров П.П.",
-      email: "employee@company.com",
-      role: "employee",
-      department: "Техническая поддержка",
-    },
-  },
-}
-
 // Role permissions
 const rolePermissions: Record<UserRole, string[]> = {
-  admin: ["create_incident", "edit_incident", "delete_incident", "assign_incident", "view_reports", "manage_users"],
-  analyst: ["create_incident", "edit_incident", "assign_incident", "view_reports"],
-  employee: ["create_incident", "view_incident"],
+  ADMIN: ["create_incident", "edit_incident", "delete_incident", "assign_incident", "view_reports", "manage_users"],
+  ANALYST: ["create_incident", "edit_incident", "assign_incident", "view_reports"],
+  EMPLOYEE: ["create_incident", "view_incident"],
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -69,39 +35,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    // Check for stored user session
-    const storedUser = localStorage.getItem("auth_user")
-    if (storedUser) {
+    // Check for existing session via API
+    const checkSession = async () => {
       try {
-        setUser(JSON.parse(storedUser))
+        const res = await fetch("/api/auth/me")
+        if (res.ok) {
+          const data = await res.json()
+          setUser(data.user)
+        }
       } catch (error) {
-        localStorage.removeItem("auth_user")
+        console.error("Session check failed:", error)
+      } finally {
+        setIsLoading(false)
       }
     }
-    setIsLoading(false)
+    checkSession()
   }, [])
 
   const login = async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true)
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      })
 
-    // Simulate API call delay
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-
-    const userData = mockUsers[email]
-    if (userData && userData.password === password) {
-      setUser(userData.user)
-      localStorage.setItem("auth_user", JSON.stringify(userData.user))
+      if (res.ok) {
+        const data = await res.json()
+        setUser(data.user)
+        setIsLoading(false)
+        return true
+      }
       setIsLoading(false)
-      return true
+      return false
+    } catch (error) {
+      console.error("Login failed:", error)
+      setIsLoading(false)
+      return false
     }
-
-    setIsLoading(false)
-    return false
   }
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" })
+    } catch (error) {
+      console.error("Logout failed:", error)
+    }
     setUser(null)
-    localStorage.removeItem("auth_user")
   }
 
   const hasPermission = (permission: string): boolean => {
